@@ -86,20 +86,22 @@ export function viewFor(state: GameState, now: number, viewer: Viewer): StateMes
   const inQuestion = state.phase === 'question' || state.phase === 'answering' || state.phase === 'result';
   const q = inQuestion ? state.questions[state.qIndex] : undefined;
   const viewerId = viewer.role === 'player' ? viewer.playerId : null;
+  // 参加者IDは「同じ人として入り直す」ための合い鍵なので、先生と本人以外には送らない
+  const canSee = (id: string | null) => viewer.role === 'host' || (id !== null && id === viewerId);
   return {
     type: 'state',
     phase: state.phase,
     isHost: viewer.role === 'host',
     you: players.find((p) => p.id === viewerId) ?? null,
     youLockedOut: viewerId !== null && state.lockedOut.includes(viewerId),
-    players,
+    players: players.map((p) => (canSee(p.id) ? p : { ...p, id: '' })),
     questionNumber: q ? state.qIndex + 1 : 0,
     questionCount: q ? state.questions.length : 0,
     questionText: q ? q.text : '',
     revealedChars: q ? revealedChars(state, now) : 0,
     revealing: state.phase === 'question',
     remainingMs: state.deadline === null ? null : Math.max(0, state.deadline - now),
-    answererId: state.answererId,
+    answererId: canSee(state.answererId) ? state.answererId : null,
     answererName: nameOf(state.answererId),
     lastWrongName: nameOf(state.lastWrongId),
     result:

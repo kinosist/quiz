@@ -23,15 +23,40 @@ abstract class QuizConnection {
   void dispose();
 }
 
-/// WebSocket による接続。切断時は 1秒 → 2秒 → 4秒 → 5秒(以後5秒)の間隔でつなぎ直す。
+/// WebSocket による接続。
+///
+/// - 切れたら 1秒 → 2秒 → 4秒 → 5秒(以後5秒)の間隔でつなぎ直す。
+/// - 定期的に `ping` を送り、サーバーは `pong` を返す。しばらく何も届かなければ、
+///   通知なしに切れた(Wi-Fi の切り替えなど)とみなしてつなぎ直す。
+/// - 接続が始まらないまま止まった場合も、時間切れでつなぎ直す。
 class WebSocketQuizConnection implements QuizConnection {
-  WebSocketQuizConnection(this.url);
+  WebSocketQuizConnection(
+    this.url, {
+    WebSocketChannel Function(Uri url)? connector,
+    this.pingInterval = const Duration(seconds: 10),
+    this.silenceTimeout = const Duration(seconds: 25),
+    this.connectTimeout = const Duration(seconds: 10),
+    this.retryDelays = const [
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+      Duration(seconds: 5),
+    ],
+  }) : _connector = connector ?? WebSocketChannel.connect;
 
   final Uri url;
+  final Duration pingInterval;
+  final Duration silenceTimeout;
+  final Duration connectTimeout;
+  final List<Duration> retryDelays;
+  final WebSocketChannel Function(Uri url) _connector;
+
   final _messages = StreamController<String>.broadcast();
   final _connected = ValueNotifier<bool>(false);
   WebSocketChannel? _channel;
   Timer? _retryTimer;
+  Timer? _pingTimer;
+  Timer? _watchdog; // 接続待ち、または「何も届かない」ことの見張り
   int _failures = 0;
   int _generation = 0; // 古い接続からの通知を見分ける
   bool _disposed = false;
@@ -45,20 +70,25 @@ class WebSocketQuizConnection implements QuizConnection {
   @override
   void connect() {
     if (_disposed) return;
-    _retryTimer?.cancel();
+    _cancelTimers();
     final generation = ++_generation;
-    final channel = WebSocketChannel.connect(url);
+    final channel = _connector(url);
     _channel = channel;
+    _watchdog = Timer(connectTimeout, () => _lost(generation));
     channel.ready.then((_) {
       if (generation != _generation || _disposed) return;
       _failures = 0;
       _connected.value = true;
+      _pingTimer = Timer.periodic(pingInterval, (_) => channel.sink.add('ping'));
+      _watchSilence(generation);
     }).catchError((Object _) {
       // 失敗は下の onError / onDone で扱う
     });
     channel.stream.listen(
       (data) {
-        if (generation == _generation && data is String) _messages.add(data);
+        if (generation != _generation) return;
+        _watchSilence(generation); // 何か届いた = つながっている
+        if (data is String && data != 'pong') _messages.add(data);
       },
       onError: (Object _) => _lost(generation),
       onDone: () => _lost(generation),
@@ -66,15 +96,29 @@ class WebSocketQuizConnection implements QuizConnection {
     );
   }
 
+  void _watchSilence(int generation) {
+    if (!_connected.value) return; // 接続待ちの間は、接続の時間切れを見張り続ける
+    _watchdog?.cancel();
+    _watchdog = Timer(silenceTimeout, () => _lost(generation));
+  }
+
+  void _cancelTimers() {
+    _retryTimer?.cancel();
+    _pingTimer?.cancel();
+    _watchdog?.cancel();
+  }
+
   void _lost(int generation) {
     if (generation != _generation || _disposed) return;
+    _generation++; // この接続からの通知は、以後すべて無視する
+    _cancelTimers();
     _connected.value = false;
+    final old = _channel;
     _channel = null;
-    const delays = [1, 2, 4, 5];
-    final seconds = delays[_failures < delays.length ? _failures : delays.length - 1];
+    old?.sink.close();
+    final delay = retryDelays[_failures < retryDelays.length ? _failures : retryDelays.length - 1];
     _failures++;
-    _retryTimer?.cancel();
-    _retryTimer = Timer(Duration(seconds: seconds), connect);
+    _retryTimer = Timer(delay, connect);
   }
 
   @override
@@ -95,7 +139,7 @@ class WebSocketQuizConnection implements QuizConnection {
   @override
   void dispose() {
     _disposed = true;
-    _retryTimer?.cancel();
+    _cancelTimers();
     _channel?.sink.close();
     _messages.close();
     _connected.dispose();

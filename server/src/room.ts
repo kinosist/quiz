@@ -4,6 +4,7 @@ import { handleApi } from './api';
 import { type BankData, type BankSet, emptyBank, listSets, seedIfNeeded } from './bank';
 import { CONFIG, MSG } from './config';
 import { type GameEvent, type GameState, type ReduceResult, initialState, pickQuestions, reduce } from './game';
+import { PinGuard } from './pin_guard';
 import { type ClientMessage, type Viewer, choicesFor, parseClientMessage, viewFor } from './protocol';
 
 export interface Env {
@@ -36,9 +37,12 @@ export class QuizRoom extends DurableObject<Env> {
   private game: GameState = initialState();
   private bank: BankData = emptyBank();
   private lastSetId: string | null = null;
+  private readonly pinGuard = new PinGuard();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    // 接続確認の ping には、Durable Object を起こさずに pong を返す
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     void ctx.blockConcurrencyWhile(() => this.load());
   }
 
@@ -91,6 +95,17 @@ export class QuizRoom extends DurableObject<Env> {
       return new Response(ADMIN_HTML, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
       });
+    }
+    // 総当たり対策: まちがいが続いている間は、API も受け付けない
+    const header = request.headers.get('authorization');
+    if (header !== null) {
+      const verdict = this.pinGuard.check(header.replace(/^Bearer /, ''), this.env.HOST_PIN, Date.now());
+      if (verdict === 'locked') {
+        return new Response(JSON.stringify({ error: MSG.tooManyAttempts }), {
+          status: 429,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
+      }
     }
     const { response, changed } = await handleApi(request, this.bank, this.env.HOST_PIN, { now: Date.now, newId });
     if (changed) {
@@ -163,7 +178,7 @@ export class QuizRoom extends DurableObject<Env> {
         return;
       default:
         if (viewer.role !== 'host') {
-          send(ws, { type: 'error', code: 'not_host', message: MSG.badPin });
+          send(ws, { type: 'error', code: 'not_host', message: MSG.notHost });
           return;
         }
         await this.onHostCommand(ws, message);
@@ -205,8 +220,14 @@ export class QuizRoom extends DurableObject<Env> {
   }
 
   private async onHostLogin(ws: WebSocket, viewer: Viewer, pin: string): Promise<void> {
-    if (!this.env.HOST_PIN || pin !== this.env.HOST_PIN) {
-      send(ws, { type: 'error', code: 'bad_pin', message: MSG.badPin });
+    const verdict = this.pinGuard.check(pin, this.env.HOST_PIN, Date.now());
+    if (verdict !== 'ok') {
+      send(
+        ws,
+        verdict === 'locked'
+          ? { type: 'error', code: 'locked', message: MSG.tooManyAttempts }
+          : { type: 'error', code: 'bad_pin', message: MSG.badPin },
+      );
       return;
     }
     const host: Viewer = { role: 'host' };

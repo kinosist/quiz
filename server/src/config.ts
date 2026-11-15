@@ -16,6 +16,8 @@ export const MSG = {
   badName: '名前は1〜12文字で入力してください',
   nameTaken: 'その名前はすでに使われています',
   badPin: '暗証番号が違います',
+  tooManyAttempts: '暗証番号のまちがいが続いたため、1分ほど待ってからやり直してください',
+  notHost: '先生としてログインしてください',
   noPlayers: '参加者がいません',
   noQuestions: '管理画面で問題を登録してください',
   badSetName: 'セット名は1〜30文字で入力してください',

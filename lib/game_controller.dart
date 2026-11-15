@@ -152,7 +152,11 @@ class GameController extends ChangeNotifier {
         _selectedSetId = _pickSet(selectedId);
       case ErrorMessage(:final code, :final message):
         _error = message;
-        if (code == 'bad_name' || code == 'name_taken' || code == 'bad_pin') _rejoin = null;
+        // 参加・ログインを断られた: 送り直しをやめ、理由が見えるトップ画面に戻す
+        if (const {'bad_name', 'name_taken', 'bad_pin', 'locked'}.contains(code)) {
+          _rejoin = null;
+          _role = Role.none;
+        }
       case KickedMessage():
         _role = Role.none;
         _rejoin = null;

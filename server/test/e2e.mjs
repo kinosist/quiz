@@ -20,7 +20,8 @@ class Client {
     this.wake = () => {};
     this.ws = new WebSocket(WS);
     this.ws.addEventListener('message', (e) => {
-      this.msgs.push(JSON.parse(e.data));
+      // 接続確認の応答(pong)だけは JSON ではない
+      this.msgs.push(e.data === 'pong' ? { type: 'pong' } : JSON.parse(e.data));
       this.wake();
     });
     this.ws.addEventListener('close', () => {
@@ -131,6 +132,8 @@ async function main() {
   const idB = randomId();
   const a1 = await connect('A(古い接続)');
   clients.push(a1);
+  a1.send('ping');
+  await a1.waitFor('ping への pong', (m) => m.type === 'pong');
   a1.send('garbage');
   a1.send({ type: 'nope' });
   a1.send({ type: 'buzz' });
@@ -142,7 +145,8 @@ async function main() {
   const b = await connect('B');
   clients.push(b);
   b.send({ type: 'join', playerId: idB, name: 'びー' });
-  await b.state('B の参加', (m) => m.you?.name === 'びー' && m.players.length === 2);
+  const bView = await b.state('B の参加', (m) => m.you?.name === 'びー' && m.players.length === 2);
+  check(bView.you.id === idB && !JSON.stringify(bView).includes(idA), 'ほかの参加者のIDが生徒に届いている');
   const c = await connect('C');
   clients.push(c);
   c.send({ type: 'join', playerId: randomId(), name: 'びー' });
@@ -183,6 +187,7 @@ async function main() {
   b.send({ type: 'buzz' }); // 後から押しても解答権は移らない
   const answering = await b.state('解答中', (m) => m.phase === 'answering');
   check(answering.answererName === 'えー' && answering.revealing === false, '解答者が A になっていない');
+  check(answering.answererId === null, '解答者のIDがほかの生徒に届いている');
   check(correctOf.has(answering.questionText), '問題文が登録したものと違う');
   const choicesA = await a.waitFor('A への選択肢', (m) => m.type === 'choices');
   check(choicesA.choices.length === 4, '選択肢が4つでない');

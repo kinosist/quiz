@@ -125,3 +125,21 @@ it('最終結果では問題文を送らない', () => {
 it('締切を過ぎていても残り時間は負にならない', () => {
   expect(viewFor(started(), 99999, { role: 'none' }).remainingMs).toBe(0);
 });
+
+it('ほかの参加者のIDは生徒に送らない(IDは入り直しの合い鍵になるため)', () => {
+  const s = buzz(started(), 'p1', 1500);
+  const other = viewFor(s, 1600, { role: 'player', playerId: 'p2' });
+  expect(other.players.map((p) => p.id)).toEqual(['', 'p2', '']);
+  expect(other.you?.id).toBe('p2');
+  expect(other.answererId).toBeNull();
+  expect(other.answererName).toBe('たろう');
+  expect(JSON.stringify(other)).not.toMatch(/p1|p3/);
+  const answerer = viewFor(s, 1600, { role: 'player', playerId: 'p1' });
+  expect(answerer.answererId).toBe('p1');
+  const anonymous = viewFor(s, 1600, { role: 'none' });
+  expect(anonymous.players.map((p) => p.id)).toEqual(['', '', '']);
+  expect(anonymous.answererId).toBeNull();
+  const host = viewFor(s, 1600, { role: 'host' });
+  expect(host.players.map((p) => p.id)).toEqual(['p1', 'p2', 'p3']);
+  expect(host.answererId).toBe('p1');
+});

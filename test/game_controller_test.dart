@@ -199,6 +199,41 @@ void main() {
     expect(c.error, isNull);
   });
 
+  test('自動の入り直しが断られたら、トップに戻ってエラーを見せる', () async {
+    c.join('たろう');
+    conn.receive(stateJson(you: player('p1', 'たろう')));
+    await pumpEventQueue();
+    expect(c.role, Role.player);
+    conn.setConnected(false);
+    conn.setConnected(true); // 自動で join を送り直す
+    conn.receive({'type': 'error', 'code': 'name_taken', 'message': 'その名前はすでに使われています'});
+    await pumpEventQueue();
+    expect(c.role, Role.none);
+    expect(c.error, 'その名前はすでに使われています');
+  });
+
+  test('暗証番号の試行が止められたときも、送り直さずトップに戻る', () async {
+    c.hostLogin('1234');
+    conn.receive(stateJson(isHost: true));
+    await pumpEventQueue();
+    conn.receive({'type': 'error', 'code': 'locked', 'message': 'しばらく待ってください'});
+    await pumpEventQueue();
+    expect(c.role, Role.none);
+    conn.setConnected(false);
+    conn.sent.clear();
+    conn.setConnected(true);
+    expect(conn.sent, isEmpty);
+  });
+
+  test('開始できないなどのエラーでは、役割はそのまま', () async {
+    c.hostLogin('1234');
+    conn.receive(stateJson(isHost: true));
+    conn.receive({'type': 'error', 'code': 'cannot_start', 'message': '管理画面で問題を登録してください'});
+    await pumpEventQueue();
+    expect(c.role, Role.host);
+    expect(c.error, '管理画面で問題を登録してください');
+  });
+
   test('壊れたメッセージは無視する', () async {
     conn.receiveRaw('garbage');
     await pumpEventQueue();
