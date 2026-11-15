@@ -168,3 +168,30 @@ it('pickQuestions は重複なく最大数を選び、正解の文字列を保�
   expect(got.map((q) => q.text)).not.toEqual(src.slice(0, 10).map((q) => q.text));
   expect(pickQuestions(src.slice(0, 3), 10, rng).length).toBe(3);
 });
+
+const scoreOf = (s: { players: { id: string; score: number }[] }, id: string) => s.players.find((p) => p.id === id)!.score;
+
+it('不正解は-1点。0点からでもマイナスになる', () => {
+  const s = ans(buzz(started(), 'p1', 1500), 'p1', 1, 2000);
+  expect(scoreOf(s, 'p1')).toBe(-1);
+  expect(scoreOf(s, 'p2')).toBe(0);
+});
+
+it('解答権を取って時間切れ・切断した場合も-1点(押して答えない抜け道をふさぐ)', () => {
+  const answering = buzz(started(), 'p1', 1500);
+  expect(scoreOf(ev(answering, { type: 'timeout' }, 11500), 'p1')).toBe(-1);
+  expect(scoreOf(ev(answering, { type: 'disconnect', playerId: 'p1' }, 1600), 'p1')).toBe(-1);
+});
+
+it('早押しの受付が時間切れになっただけでは減点しない', () => {
+  const s = ev(started(), { type: 'timeout' }, 12320);
+  expect(s.players.map((p) => p.score)).toEqual([0, 0, 0]);
+});
+
+it('正解+1と不正解-1が積み重なる', () => {
+  let s = ans(buzz(started(), 'p1', 1500), 'p1', 0, 2000); // p1 正解 → 1点
+  s = ev(s, { type: 'timeout' }, 6000); // 2問目へ
+  s = ans(buzz(s, 'p1', 6500), 'p1', 1, 7000); // p1 不正解 → 0点
+  s = ans(buzz(s, 'p2', 7500), 'p2', 2, 8000); // p2 不正解 → -1点
+  expect([scoreOf(s, 'p1'), scoreOf(s, 'p2'), scoreOf(s, 'p3')]).toEqual([0, -1, 0]);
+});

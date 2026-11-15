@@ -214,7 +214,7 @@ async function main() {
   a.send({ type: 'answer', choice: choicesA2.choices.indexOf(correct2) });
   await b.state('2問目の結果', (m) => m.phase === 'result' && m.result.winnerName === 'えー');
   const final = await b.state('最終結果', (m) => m.phase === 'final', 8000);
-  check(JSON.stringify(final.players.map((p) => [p.name, p.score, p.rank])) === JSON.stringify([['えー', 2, 1], ['びー', 0, 2]]), '最終順位が違う: ' + JSON.stringify(final.players));
+  check(JSON.stringify(final.players.map((p) => [p.name, p.score, p.rank])) === JSON.stringify([['えー', 2, 1], ['びー', -1, 2]]), '最終順位が違う: ' + JSON.stringify(final.players));
 
   // 11. もう一度 → 待機
   host.send({ type: 'host_again' });

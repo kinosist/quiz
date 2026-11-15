@@ -5,6 +5,10 @@ export const CONFIG = {
   buzzWindowMs: 10000,
   answerMs: 10000,
   resultMs: 4000,
+  /** 正解したときに増える点 */
+  correctPoints: 1,
+  /** 不正解(解答権を取って答えなかった場合を含む)で減る点 */
+  wrongPenalty: 1,
   nameMax: 12,
   setNameMax: 30,
   questionMax: 200,

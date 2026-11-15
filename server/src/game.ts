@@ -164,6 +164,8 @@ function miss(state: GameState, now: number, playerId: string): GameState {
   return afterMiss(
     {
       ...state,
+      // 減点する。得点はマイナスにもなる
+      players: state.players.map((p) => (p.id === playerId ? { ...p, score: p.score - CONFIG.wrongPenalty } : p)),
       lockedOut: state.lockedOut.includes(playerId) ? state.lockedOut : [...state.lockedOut, playerId],
       lastWrongId: playerId,
       answererId: null,
@@ -210,7 +212,7 @@ function answer(state: GameState, playerId: string, choice: number, now: number)
   if (!Number.isInteger(choice) || choice < 0 || choice >= q.choices.length) return state;
   if (choice !== q.correctIndex) return miss(state, now, playerId);
   return enterResult(
-    { ...state, players: state.players.map((p) => (p.id === playerId ? { ...p, score: p.score + 1 } : p)) },
+    { ...state, players: state.players.map((p) => (p.id === playerId ? { ...p, score: p.score + CONFIG.correctPoints } : p)) },
     now,
     playerId,
   );
