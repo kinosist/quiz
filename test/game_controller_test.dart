@@ -218,4 +218,22 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 160));
     expect(notified, 1);
   });
+
+  test('見ている画面がなくなったら、表示用のタイマーを止める', () async {
+    var notified = 0;
+    void listener() => notified++;
+    c.addListener(listener);
+    conn.receive(stateJson(
+        phase: 'question', questionText: 'あいうえおかきくけこ', revealedChars: 0, revealing: true, remainingMs: 11000));
+    await pumpEventQueue();
+    c.removeListener(listener);
+    notified = 0;
+    now = now.add(const Duration(seconds: 1));
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    expect(notified, 0);
+    c.addListener(listener);
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    expect(notified, 1);
+    c.removeListener(listener);
+  });
 }

@@ -180,13 +180,31 @@ class GameController extends ChangeNotifier {
     }
     _shownChars = revealedCharsNow;
     _shownSeconds = remainingSecondsNow;
-    final needsTicker = state.revealing || state.remainingMs != null;
-    if (needsTicker) {
+    _syncTicker();
+  }
+
+  /// 文字の表示か秒読みがあり、かつ見ている画面があるときだけタイマーを動かす。
+  void _syncTicker() {
+    final s = _state;
+    final needed = hasListeners && s != null && (s.revealing || s.remainingMs != null);
+    if (needed) {
       _ticker ??= Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
     } else {
       _ticker?.cancel();
       _ticker = null;
     }
+  }
+
+  @override
+  void addListener(VoidCallback listener) {
+    super.addListener(listener);
+    _syncTicker();
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    _syncTicker();
   }
 
   /// 文字の表示と秒読みを進める。見た目が変わったときだけ知らせる。
