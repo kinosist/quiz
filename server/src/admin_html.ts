@@ -27,7 +27,17 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   #login h2 { margin: 0 0 12px; font-size: 18px; }
   #login button { margin-top: 12px; width: 100%; }
   .error { color: var(--danger); font-weight: 600; margin: 8px 0; min-height: 1.6em; overflow-wrap: anywhere; }
-  #app { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; padding: 16px 20px; max-width: 1100px; margin: 0 auto; }
+  #app { padding: 16px 20px; max-width: 1100px; margin: 0 auto; }
+  #grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; }
+  #game { margin-bottom: 16px; }
+  #game .status { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  #game select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); max-width: 100%; }
+  #game button:disabled { opacity: 0.45; cursor: default; }
+  #players { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .player { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 12px; background: var(--card); overflow-wrap: anywhere; }
+  .player.offline { opacity: 0.45; }
+  .player .score { color: var(--muted); font-size: 14px; }
+  .player button { padding: 0 8px; border-radius: 999px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
   .card h2 { font-size: 16px; margin: 0 0 10px; overflow-wrap: anywhere; }
   .set-row { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; margin-bottom: 6px; }
@@ -48,7 +58,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   .choice input[type=radio] { width: 20px; height: 20px; flex: none; }
   .hint { color: var(--muted); font-size: 14px; }
   .empty { color: var(--muted); padding: 12px 0; }
-  @media (max-width: 700px) { #app { grid-template-columns: minmax(0, 1fr); padding: 12px; } .question { flex-wrap: wrap; } .question .actions { margin-left: auto; } }
+  @media (max-width: 700px) { #app { padding: 12px; } #grid { grid-template-columns: minmax(0, 1fr); } .question { flex-wrap: wrap; } .question .actions { margin-left: auto; } }
 </style>
 </head>
 <body>
@@ -65,6 +75,24 @@ export const ADMIN_HTML = String.raw`<!doctype html>
 </form>
 
 <div id="app" class="hidden">
+  <section id="game" class="card">
+    <h2>クイズの進行</h2>
+    <div id="gameStatus" class="status"></div>
+    <div id="gameError" class="error" role="alert"></div>
+    <div class="toolbar">
+      <label for="startSet">出題するセット</label>
+      <select id="startSet"></select>
+      <button id="startGame" class="primary" type="button">開始</button>
+      <button id="abortGame" class="danger" type="button">中止</button>
+      <button id="againGame" type="button">もう一度</button>
+    </div>
+    <div class="toolbar">
+      <strong id="playerCount"></strong>
+      <button id="clearPlayers" type="button">全員を退出させる</button>
+    </div>
+    <div id="players"></div>
+  </section>
+  <div id="grid">
   <section class="card">
     <h2>セット</h2>
     <div id="sets"></div>
@@ -94,6 +122,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
       <div id="questions"></div>
     </div>
   </section>
+  </div>
 </div>
 
 <script>
@@ -125,6 +154,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
 
   function logout(message) {
     pin = '';
+    stopPolling();
     try { sessionStorage.removeItem(PIN_KEY); } catch (e) {}
     show($('app'), false);
     show($('logout'), false);
@@ -161,7 +191,104 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     }
   }
 
+  // ---- クイズの進行 ----
+  var game = null;        // サーバーから取得した現在の状態
+  var startSetId = null;  // 出題するセット(この画面での選択)
+  var pollTimer = null;
+
+  function setGameError(message) { $('gameError').textContent = message || ''; }
+
+  function phaseLabel(g) {
+    if (g.phase === 'lobby') return '待機中(開始を待っています)';
+    if (g.phase === 'final') return '結果発表';
+    var label = '出題中 第' + g.questionNumber + '問 / ' + g.questionCount;
+    if (g.phase === 'answering') label += '(' + (g.answererName || '') + 'さんが解答中)';
+    if (g.phase === 'result') label += '(結果を表示中)';
+    return label;
+  }
+
+  function renderStartSets() {
+    var select = $('startSet');
+    var usable = sets.filter(function (s) { return s.count > 0; });
+    var wanted = startSetId || (game && game.selectedSetId) || null;
+    if (!usable.some(function (s) { return s.id === wanted; })) wanted = usable.length > 0 ? usable[0].id : null;
+    startSetId = wanted;
+    clear(select);
+    if (usable.length === 0) {
+      var none = el('option', '', '問題のあるセットがありません');
+      none.value = '';
+      select.appendChild(none);
+    }
+    usable.forEach(function (s) {
+      var option = el('option', '', s.name + '(' + s.count + '問)');
+      option.value = s.id;
+      option.selected = s.id === startSetId;
+      select.appendChild(option);
+    });
+    select.disabled = usable.length === 0;
+  }
+
+  function renderGame() {
+    if (!game) return;
+    $('gameStatus').textContent = phaseLabel(game);
+    $('playerCount').textContent = '参加者 ' + game.players.length + '人';
+    var lobby = game.phase === 'lobby';
+    $('startGame').disabled = !lobby || game.players.length === 0 || !startSetId;
+    $('abortGame').disabled = lobby;
+    $('againGame').disabled = game.phase !== 'final';
+    $('clearPlayers').disabled = !lobby || game.players.length === 0;
+    var box = $('players');
+    clear(box);
+    game.players.forEach(function (p) {
+      var chip = el('span', 'player' + (p.connected ? '' : ' offline'));
+      chip.appendChild(el('span', '', p.name));
+      chip.appendChild(el('span', 'score', p.score + '点'));
+      var kick = button('×', 'plain', function () {
+        if (!confirm('「' + p.name + '」を退出させます。よろしいですか?')) return;
+        gameAction('kick', { playerId: p.id });
+      });
+      kick.title = '退出させる';
+      kick.setAttribute('aria-label', p.name + 'を退出させる');
+      chip.appendChild(kick);
+      box.appendChild(chip);
+    });
+  }
+
+  // 進行の操作を送り、返ってきた最新の状態を表示する
+  async function gameAction(name, body) {
+    setGameError('');
+    try {
+      game = await api('POST', '/api/game/' + name, body || {});
+      renderGame();
+    } catch (e) {
+      if (e.message !== 'unauthorized') setGameError(e.message || '通信に失敗しました');
+    }
+  }
+
+  async function refreshGame() {
+    if (!pin || document.hidden) return;
+    try {
+      game = await api('GET', '/api/game');
+      renderGame();
+    } catch (e) {
+      // 一時的な通信の失敗は、次の更新で回復する
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    refreshGame();
+    pollTimer = setInterval(refreshGame, 2000);
+  }
+
+  function stopPolling() {
+    if (pollTimer !== null) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
   function renderSets() {
+    renderStartSets();
+    renderGame();
     var box = $('sets');
     clear(box);
     if (sets.length === 0) box.appendChild(el('div', 'empty', 'セットがありません'));
@@ -276,6 +403,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     show($('login'), false);
     show($('app'), true);
     show($('logout'), true);
+    startPolling();
   }
 
   $('login').addEventListener('submit', function (event) {
@@ -283,6 +411,22 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     enter($('pin').value);
   });
   $('logout').addEventListener('click', function () { logout(''); });
+
+  $('startSet').addEventListener('change', function () {
+    startSetId = $('startSet').value || null;
+    renderGame();
+  });
+  $('startGame').addEventListener('click', function () {
+    if (startSetId) gameAction('start', { setId: startSetId });
+  });
+  $('abortGame').addEventListener('click', function () {
+    if (confirm('ゲームを中止します。得点は0に戻ります。よろしいですか?')) gameAction('abort');
+  });
+  $('againGame').addEventListener('click', function () { gameAction('again'); });
+  $('clearPlayers').addEventListener('click', function () {
+    if (confirm('参加者を全員退出させます。よろしいですか?')) gameAction('clear');
+  });
+  document.addEventListener('visibilitychange', refreshGame);
 
   $('addSet').addEventListener('click', function () {
     var name = prompt('新しいセットの名前(30文字まで)');

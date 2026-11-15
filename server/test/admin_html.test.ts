@@ -32,3 +32,9 @@ it('インラインの script が構文エラーにならない', () => {
   const js = ADMIN_HTML.match(/<script>([\s\S]*)<\/script>/)![1];
   expect(() => new Function(js)).not.toThrow();
 });
+
+it('クイズの開始・中止などを操作できる', () => {
+  for (const t of ['クイズの進行', '開始', '中止', 'もう一度', '全員を退出させる', '/api/game', '参加者']) {
+    expect(ADMIN_HTML).toContain(t);
+  }
+});

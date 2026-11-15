@@ -225,6 +225,23 @@ async function main() {
   host.send({ type: 'host_kick', playerId: idB });
   await b.waitFor('B への kicked', (m) => m.type === 'kicked');
   await a.state('B がいない一覧', (m) => m.players.length === 1);
+
+  // 13. 管理画面(API)からの開始・中止
+  check((await api('POST', '/api/game/start', { setId: createdSetId }, null)).status === 401, '認証なしで開始できてしまう');
+  const before = await api('GET', '/api/game');
+  check(before.status === 200 && before.body.phase === 'lobby' && before.body.players.length === 1, 'GET /api/game が待機中を返さない');
+  check((await api('POST', '/api/game/start', { setId: 'no-such-set' })).status === 400, '存在しないセットで開始できてしまう');
+  const startedByApi = await api('POST', '/api/game/start', { setId: createdSetId });
+  check(startedByApi.status === 200 && startedByApi.body.phase === 'question', 'API から開始できない: ' + JSON.stringify(startedByApi.body));
+  await a.state('API からの開始が生徒に届く', (m) => m.phase === 'question' && m.questionNumber === 1);
+  const again = await api('POST', '/api/game/start', { setId: createdSetId });
+  check(again.status === 400 && again.body.error === 'すでにゲームが始まっています', '開始済みなのに開始できてしまう');
+  const aborted = await api('POST', '/api/game/abort');
+  check(aborted.status === 200 && aborted.body.phase === 'lobby', 'API から中止できない');
+  await a.state('API からの中止が生徒に届く', (m) => m.phase === 'lobby');
+  const cleared = await api('POST', '/api/game/clear');
+  check(cleared.status === 200 && cleared.body.players.length === 0, 'API から全員を退出させられない');
+  await a.waitFor('A への kicked', (m) => m.type === 'kicked');
 }
 
 try {

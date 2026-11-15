@@ -17,6 +17,18 @@ export interface ApiDeps {
   newId: () => string;
 }
 
+/** 管理画面からゲームを進めるための操作。実体は Durable Object が持つ。 */
+export interface GameControl {
+  /** 先生用の画面と同じ内容の、現在の状態 */
+  view(): unknown;
+  /** 開始する。開始できなければ理由(日本語)を返す */
+  start(setId: string): Promise<string | null>;
+  abort(): Promise<void>;
+  again(): Promise<void>;
+  clear(): Promise<void>;
+  kick(playerId: string): Promise<void>;
+}
+
 export interface ApiResult {
   response: Response;
   /** データを書き換えた(保存が必要) */
@@ -44,6 +56,7 @@ export async function handleApi(
   data: BankData,
   pin: string | undefined,
   deps: ApiDeps,
+  game?: GameControl,
 ): Promise<ApiResult> {
   if (!pin || req.headers.get('authorization') !== 'Bearer ' + pin) {
     return { response: json(401, { error: MSG.badPin }), changed: false };
@@ -57,7 +70,39 @@ export async function handleApi(
   const route = req.method + ' ' + parts.map((p, i) => (i === 2 ? ':id' : p)).join('/');
   const id = parts[2] ?? '';
   const ok = (status: number, body: unknown): ApiResult => ({ response: json(status, body), changed: true });
+  const plain = (status: number, body: unknown): ApiResult => ({ response: json(status, body), changed: false });
   try {
+    if (parts[1] === 'game' && game) {
+      if (route === 'GET api/game') return plain(200, game.view());
+      if (route !== 'POST api/game/:id') return plain(404, { error: 'not found' });
+      const body = id === 'start' || id === 'kick' ? await readBody(req) : null;
+      const field = (key: string): unknown =>
+        typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[key] : undefined;
+      switch (id) {
+        case 'start': {
+          const setId = field('setId');
+          const error = typeof setId === 'string' ? await game.start(setId) : MSG.noQuestions;
+          return error ? plain(400, { error }) : plain(200, game.view());
+        }
+        case 'abort':
+          await game.abort();
+          return plain(200, game.view());
+        case 'again':
+          await game.again();
+          return plain(200, game.view());
+        case 'clear':
+          await game.clear();
+          return plain(200, game.view());
+        case 'kick': {
+          const playerId = field('playerId');
+          if (typeof playerId !== 'string') return plain(400, { error: MSG.playerNotFound });
+          await game.kick(playerId);
+          return plain(200, game.view());
+        }
+        default:
+          return plain(404, { error: 'not found' });
+      }
+    }
     switch (route) {
       case 'GET api/sets':
         return { response: json(200, { sets: listSets(data) }), changed: false };

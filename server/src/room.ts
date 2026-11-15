@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { ADMIN_HTML } from './admin_html';
-import { handleApi } from './api';
+import { type GameControl, handleApi } from './api';
 import { type BankData, type BankSet, emptyBank, listSets, seedIfNeeded } from './bank';
 import { CONFIG, MSG } from './config';
 import { type GameEvent, type GameState, type ReduceResult, initialState, pickQuestions, reduce } from './game';
@@ -107,12 +107,47 @@ export class QuizRoom extends DurableObject<Env> {
         });
       }
     }
-    const { response, changed } = await handleApi(request, this.bank, this.env.HOST_PIN, { now: Date.now, newId });
+    const { response, changed } = await handleApi(
+      request,
+      this.bank,
+      this.env.HOST_PIN,
+      { now: Date.now, newId },
+      this.gameControl,
+    );
     if (changed) {
       await this.saveBank();
       this.sendSetsToHosts();
     }
     return response;
+  }
+
+  /** 管理画面(API)からの操作。先生の端末からの操作と同じ処理を使う。 */
+  private readonly gameControl: GameControl = {
+    view: () => ({
+      ...viewFor(this.game, Date.now(), { role: 'host' }),
+      selectedSetId: this.setsMessage().selectedId,
+    }),
+    start: (setId) => this.startGame(setId),
+    abort: async () => void (await this.dispatch({ type: 'abort' })),
+    again: async () => void (await this.dispatch({ type: 'again' })),
+    clear: async () => void (await this.dispatch({ type: 'clear' })),
+    kick: async (playerId) => void (await this.dispatch({ type: 'kick', playerId })),
+  };
+
+  /** 指定のセットで開始する。開始できなければ理由を返す。 */
+  private async startGame(setId: string): Promise<string | null> {
+    const set = this.bank.sets.find((s) => s.id === setId);
+    if (!set || set.questions.length === 0) return MSG.noQuestions;
+    if (this.game.phase !== 'lobby') return MSG.alreadyStarted;
+    const result = await this.dispatch({
+      type: 'start',
+      questions: pickQuestions(set.questions, CONFIG.maxQuestions, Math.random),
+    });
+    if (result.error) return result.error.message;
+    this.lastSetId = setId;
+    await this.saveBank();
+    this.sendSetsToHosts();
+    return null;
   }
 
   private setsMessage() {
@@ -240,21 +275,11 @@ export class QuizRoom extends DurableObject<Env> {
   private async onHostCommand(ws: WebSocket, message: ClientMessage): Promise<void> {
     switch (message.type) {
       case 'host_start': {
-        const set = this.bank.sets.find((s) => s.id === message.setId);
-        const result =
-          set && set.questions.length > 0
-            ? await this.dispatch({
-                type: 'start',
-                questions: pickQuestions(set.questions, CONFIG.maxQuestions, Math.random),
-              })
-            : { error: { code: 'cannot_start', message: MSG.noQuestions } };
-        if (result.error) {
-          send(ws, { type: 'error', ...result.error });
+        const error = await this.startGame(message.setId);
+        if (error) {
+          send(ws, { type: 'error', code: 'cannot_start', message: error });
           send(ws, this.setsMessage());
-          return;
         }
-        this.lastSetId = message.setId;
-        await this.saveBank();
         return;
       }
       case 'host_abort':

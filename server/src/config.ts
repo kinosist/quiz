@@ -20,6 +20,7 @@ export const MSG = {
   notHost: '先生としてログインしてください',
   noPlayers: '参加者がいません',
   noQuestions: '管理画面で問題を登録してください',
+  alreadyStarted: 'すでにゲームが始まっています',
   badSetName: 'セット名は1〜30文字で入力してください',
   setNameTaken: '同じ名前のセットがあります',
   badQuestionText: '問題文は1〜200文字で入力してください',
@@ -28,6 +29,7 @@ export const MSG = {
   badCorrect: '正解を1つ選んでください',
   setNotFound: 'セットが見つかりません',
   questionNotFound: '問題が見つかりません',
+  playerNotFound: '参加者が見つかりません',
 } as const;
 
 /** 文字数(コードポイント数)。絵文字や漢字も1文字と数える。 */

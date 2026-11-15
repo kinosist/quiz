@@ -91,3 +91,81 @@ it('検証エラーは 400、存在しないものは 404、壊れた JSON は 4
   expect((await call(d, 'PATCH', '/api/sets')).response.status).toBe(404);
   expect((await call(d, 'GET', '/api/sets/%E0%A4%A/questions')).response.status).toBe(404);
 });
+
+// ---- ゲームの進行(管理画面から開始・中止など) ----
+function fakeGame() {
+  const calls: string[] = [];
+  const game = {
+    calls,
+    startError: null as string | null,
+    view: () => ({ phase: 'lobby', calls: calls.length }),
+    start: async (setId: string) => {
+      calls.push('start:' + setId);
+      return game.startError;
+    },
+    abort: async () => void calls.push('abort'),
+    again: async () => void calls.push('again'),
+    clear: async () => void calls.push('clear'),
+    kick: async (playerId: string) => void calls.push('kick:' + playerId),
+  };
+  return game;
+}
+const gameCall = (game: ReturnType<typeof fakeGame> | undefined, method: string, path: string, body?: unknown, pin: string | null = '1234') =>
+  handleApi(
+    new Request('http://x' + path, {
+      method,
+      headers: pin !== null ? { authorization: 'Bearer ' + pin } : {},
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+    emptyBank(),
+    '1234',
+    deps,
+    game,
+  );
+
+it('ゲームの状態を取得できる', async () => {
+  const r = await gameCall(fakeGame(), 'GET', '/api/game');
+  expect(r.response.status).toBe(200);
+  expect(await r.response.json()).toEqual({ phase: 'lobby', calls: 0 });
+  expect(r.changed).toBe(false);
+});
+
+it('セットを指定して開始できる。応答は開始後の状態', async () => {
+  const game = fakeGame();
+  const r = await gameCall(game, 'POST', '/api/game/start', { setId: 's1' });
+  expect(r.response.status).toBe(200);
+  expect(game.calls).toEqual(['start:s1']);
+  expect(await r.response.json()).toEqual({ phase: 'lobby', calls: 1 });
+});
+
+it('開始できないときは 400 と理由を返す', async () => {
+  const game = fakeGame();
+  game.startError = MSG.noPlayers;
+  const r = await gameCall(game, 'POST', '/api/game/start', { setId: 's1' });
+  expect(r.response.status).toBe(400);
+  expect(await r.response.json()).toEqual({ error: MSG.noPlayers });
+  const noSet = await gameCall(game, 'POST', '/api/game/start', {});
+  expect(noSet.response.status).toBe(400);
+  expect(await noSet.response.json()).toEqual({ error: MSG.noQuestions });
+  expect(game.calls).toEqual(['start:s1']);
+});
+
+it('中止・もう一度・全員退出・1人退出', async () => {
+  const game = fakeGame();
+  for (const op of ['abort', 'again', 'clear']) {
+    expect((await gameCall(game, 'POST', '/api/game/' + op)).response.status).toBe(200);
+  }
+  expect((await gameCall(game, 'POST', '/api/game/kick', { playerId: 'p1' })).response.status).toBe(200);
+  expect((await gameCall(game, 'POST', '/api/game/kick', { playerId: 5 })).response.status).toBe(400);
+  expect(game.calls).toEqual(['abort', 'again', 'clear', 'kick:p1']);
+});
+
+it('ゲームの操作も暗証番号が必要。知らない操作は 404', async () => {
+  const game = fakeGame();
+  expect((await gameCall(game, 'POST', '/api/game/start', { setId: 's1' }, null)).response.status).toBe(401);
+  expect((await gameCall(game, 'GET', '/api/game', undefined, '9999')).response.status).toBe(401);
+  expect((await gameCall(game, 'POST', '/api/game/explode')).response.status).toBe(404);
+  expect((await gameCall(game, 'DELETE', '/api/game')).response.status).toBe(404);
+  expect((await gameCall(undefined, 'GET', '/api/game')).response.status).toBe(404);
+  expect(game.calls).toEqual([]);
+});
