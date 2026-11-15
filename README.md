@@ -1,17 +1,108 @@
-# quiz_new
+# 早押しクイズ
 
-A new Flutter project.
+学校で使う、オンライン参加の早押しクイズです。ルームは1つで、進行(出題・早押しの判定・採点)はサーバーが自動で行い、解答は4択です。
 
-## Getting Started
+- `lib/` … Android アプリ(Flutter)
+- `server/` … サーバー(Cloudflare Workers + Durable Objects)。問題の管理画面つき
+- `docs/superpowers/` … 設計書と実装計画
 
-This project is a starting point for a Flutter application.
+## 必要なもの
 
-A few resources to get you started if this is your first Flutter project:
+- Flutter 3.41 以降、Android Studio のエミュレーター
+- Node.js 22 以降
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 動かし方(PC とエミュレーターだけで完結します)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 1. サーバーを起動する
+
+```bash
+cd server
+npm install
+cp .dev.vars.example .dev.vars   # 開発用の暗証番号 1234 が入っています
+npm run dev
+```
+
+`http://127.0.0.1:8787` で起動します。止めるときは Ctrl+C です。
+
+### 2. アプリを起動する
+
+エミュレーターを起動してから、プロジェクトのルートで実行します。
+
+```bash
+flutter run
+```
+
+エミュレーターからは、PC 上のサーバーに `ws://10.0.2.2:8787/ws` でつながります(既定値)。
+
+早押しは2人以上いないと試せません。相手役は、2台目のエミュレーターか、PC のブラウザで起動できます。
+
+```bash
+flutter run -d chrome --dart-define=SERVER_URL=ws://127.0.0.1:8787/ws
+```
+
+## 使い方
+
+### 生徒
+
+1. アプリを開き、名前(12文字まで)を入れて「参加する」を押します。
+2. 先生が開始すると問題文が1文字ずつ出ます。分かったら「早押し!」を押します。
+3. 最初に押した人にだけ4択が出るので、10秒以内に答えます。
+4. 正解で1点。不正解だとその問題はお休みになり、ほかの人が早押しを続けます。
+
+### 先生
+
+1. トップ画面の「先生用」を押し、暗証番号を入れます(開発中は `1234`)。
+2. 問題セットを選んで「開始」を押します。セットからランダムに最大10問が出題されます。
+3. ゲーム中は全員の得点が表示されます。「中止」で待機画面に戻せます。
+4. 参加者名の横の × で1人を退出させられます。「全員を退出させる」は次のクラスに入れ替えるときに使います。
+
+### 問題の管理画面
+
+PC のブラウザで `http://localhost:8787/admin` を開き、先生用と同じ暗証番号で入ります。
+
+- セットの作成・名前の変更・削除
+- セット内の問題の追加・編集・削除(問題文、選択肢4つ、正解1つ)
+
+最初から「サンプル(一般常識)」30問が入っています。変更した内容は次のゲームから使われます。
+
+## ルールの数値を変える
+
+`server/src/config.ts` にまとまっています(問題数、文字の表示速度、制限時間など)。
+文字の表示速度(`msPerChar`)を変えるときは、`lib/game_controller.dart` の `_msPerChar` も同じ値にしてください。
+
+## テスト
+
+```bash
+cd server
+npm test            # ルール・問題セット・API の単体テスト
+npm run typecheck
+npm run e2e         # 通しテスト。別のターミナルで npm run dev を起動しておく
+
+cd ..
+flutter test        # アプリのテスト
+flutter analyze
+```
+
+`npm run e2e` は実際のルームを使うので、ほかの人が遊んでいる最中には実行しないでください。
+
+## Cloudflare に公開する
+
+公開すると、インターネット経由でどこからでも参加できるようになります。
+
+```bash
+cd server
+npx wrangler login                 # ブラウザで Cloudflare にログイン
+npx wrangler secret put HOST_PIN   # 本番用の暗証番号を決めて入力
+npm run deploy
+```
+
+表示された `https://quiz-new-server.<アカウント名>.workers.dev` が公開先です。
+管理画面は `https://quiz-new-server.<アカウント名>.workers.dev/admin` です。
+
+アプリは、公開先を指定してビルドし直します。
+
+```bash
+flutter run --dart-define=SERVER_URL=wss://quiz-new-server.<アカウント名>.workers.dev/ws
+```
+
+`HOST_PIN` を設定しないと、誰も先生として入れず、管理画面も使えません。

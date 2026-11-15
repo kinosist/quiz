@@ -174,12 +174,21 @@ class _QuestionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: SingleChildScrollView(
-        reverse: true, // 長い問題文でも、いま出てきた文字が見えるようにする
-        child: Text(
-          text,
-          key: const Key('questionText'),
-          style: (large ? theme.textTheme.headlineMedium : theme.textTheme.headlineSmall)?.copyWith(height: 1.5),
+      // 短い問題文は上から表示し、長くてはみ出すときは、いま出てきた文字(末尾)が見えるようにする
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          reverse: true,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                text,
+                key: const Key('questionText'),
+                style: (large ? theme.textTheme.headlineMedium : theme.textTheme.headlineSmall)?.copyWith(height: 1.5),
+              ),
+            ),
+          ),
         ),
       ),
     );

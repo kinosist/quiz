@@ -35,6 +35,7 @@ Map<String, dynamic> q({
     );
 
 void main() {
+  questionCardTests();
   testWidgets('出題中: 表示済みの文字だけ出て、早押しを送る', (t) async {
     final (conn, c) = await pumpApp(t);
     c.join('たろう');
@@ -195,5 +196,18 @@ void main() {
     await t.pump();
     expect(find.byKey(const Key('buzzButton')), findsOneWidget);
     expect(t.takeException(), isNull);
+  });
+}
+
+// 問題文カードの中での位置を確かめる
+void questionCardTests() {
+  testWidgets('短い問題文はカードの上から表示する', (t) async {
+    final (conn, c) = await pumpApp(t);
+    c.join('たろう');
+    conn.receive(q());
+    await t.pump();
+    final text = t.getRect(find.byKey(const Key('questionText')));
+    final header = t.getRect(find.text('第3問 / 10'));
+    expect(text.top - header.bottom, lessThan(60));
   });
 }
