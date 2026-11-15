@@ -13,6 +13,8 @@ export const CONFIG = {
   setNameMax: 30,
   questionMax: 200,
   choiceMax: 40,
+  /** CSV から一度に取り込める問題数 */
+  importMax: 500,
 } as const;
 
 /** 利用者に見せるエラー文言。 */
@@ -34,6 +36,11 @@ export const MSG = {
   setNotFound: 'セットが見つかりません',
   questionNotFound: '問題が見つかりません',
   playerNotFound: '参加者が見つかりません',
+  csvEmpty: '取り込める問題がありません',
+  csvTooMany: '一度に取り込めるのは500問までです',
+  csvBadMode: '取り込み方法が正しくありません',
+  csvShortRow: '列が足りません(問題文、選択肢1〜4、正解の6列が必要です)',
+  csvBadCorrect: '正解は1〜4の数字で指定してください',
 } as const;
 
 /** 文字数(コードポイント数)。絵文字や漢字も1文字と数える。 */

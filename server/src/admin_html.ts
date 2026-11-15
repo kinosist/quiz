@@ -26,7 +26,10 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   #login { max-width: 360px; margin: 80px auto; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
   #login h2 { margin: 0 0 12px; font-size: 18px; }
   #login button { margin-top: 12px; width: 100%; }
-  .error { color: var(--danger); font-weight: 600; margin: 8px 0; min-height: 1.6em; overflow-wrap: anywhere; }
+  .error { color: var(--danger); font-weight: 600; margin: 8px 0; min-height: 1.6em; overflow-wrap: anywhere; white-space: pre-line; }
+  .notice { color: #1b5e20; font-weight: 600; margin: 8px 0; }
+  #importPanel { border: 2px solid var(--accent); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  #importPanel p { margin: 0 0 8px; overflow-wrap: anywhere; }
   #app { padding: 16px 20px; max-width: 1100px; margin: 0 auto; }
   #grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; }
   #game { margin-bottom: 16px; }
@@ -100,12 +103,25 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   </section>
   <section class="card">
     <div id="error" class="error" role="alert"></div>
+    <div id="notice" class="notice" role="status"></div>
     <div id="noSet" class="empty">左の一覧からセットを選ぶか、「+ セットを作成」で新しいセットを作ってください。</div>
     <div id="setPane" class="hidden">
       <div class="toolbar">
         <h2 id="setTitle"></h2>
+        <button id="exportCsv" type="button">CSVを書き出す</button>
+        <button id="importCsv" type="button">CSVを取り込む</button>
+        <input id="csvFile" class="hidden" type="file" accept=".csv,text/csv">
         <button id="renameSet" type="button">名前を変更</button>
         <button id="deleteSet" class="danger" type="button">削除</button>
+      </div>
+      <div id="importPanel" class="hidden">
+        <p id="importName"></p>
+        <p class="hint">CSV の列は「問題文, 選択肢1, 選択肢2, 選択肢3, 選択肢4, 正解(1〜4の数字)」の順です。1行目が見出しの場合は読み飛ばします。「CSVを書き出す」で出したファイルと同じ形です。</p>
+        <div class="toolbar">
+          <button id="importAppend" class="primary" type="button">追加する</button>
+          <button id="importReplace" class="danger" type="button">置き換える</button>
+          <button id="importCancel" type="button">やめる</button>
+        </div>
       </div>
       <form id="form" class="hidden">
         <h3 id="formTitle"></h3>
@@ -151,6 +167,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
     return b;
   }
   function setError(message) { $('error').textContent = message || ''; }
+  function setNotice(message) { $('notice').textContent = message || ''; }
 
   function logout(message) {
     pin = '';
@@ -184,6 +201,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   // 操作を実行し、失敗したら理由を表示する
   async function run(action) {
     setError('');
+    setNotice('');
     try {
       await action();
     } catch (e) {
@@ -372,6 +390,7 @@ export const ADMIN_HTML = String.raw`<!doctype html>
   }
 
   async function selectSet(id) {
+    if (id !== currentId) { importText = null; show($('importPanel'), false); }
     currentId = id;
     editingId = null;
     questions = [];
@@ -457,6 +476,75 @@ export const ADMIN_HTML = String.raw`<!doctype html>
       await reload();
     });
   });
+
+  // ---- CSV の書き出し・取り込み ----
+  var importText = null; // 取り込もうとしている CSV の中身
+
+  function currentSet() { return sets.find(function (s) { return s.id === currentId; }) || null; }
+
+  function closeImport() {
+    importText = null;
+    $('csvFile').value = '';
+    show($('importPanel'), false);
+  }
+
+  // Excel の「CSV」は Shift_JIS、「CSV UTF-8」は UTF-8 なので、両方読めるようにする
+  function decodeCsv(buffer) {
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch (e) {
+      return new TextDecoder('shift_jis').decode(buffer);
+    }
+  }
+
+  $('exportCsv').addEventListener('click', function () {
+    var set = currentSet();
+    if (!set) return;
+    run(async function () {
+      var res = await fetch('/api/sets/' + encodeURIComponent(set.id) + '/csv', { headers: { 'Authorization': 'Bearer ' + pin } });
+      if (res.status === 401) { logout('暗証番号が違います'); throw new Error('unauthorized'); }
+      if (!res.ok) throw new Error('書き出しに失敗しました');
+      var url = URL.createObjectURL(await res.blob());
+      var link = document.createElement('a');
+      link.href = url;
+      // ファイル名に使えない文字は「_」にする
+      link.download = set.name.replace(/[\\/:*?"<>|]/g, '_') + '.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    });
+  });
+
+  $('importCsv').addEventListener('click', function () { $('csvFile').click(); });
+
+  $('csvFile').addEventListener('change', function () {
+    var file = $('csvFile').files[0];
+    if (!file) return;
+    run(async function () {
+      if (file.size > 2 * 1024 * 1024) throw new Error('ファイルが大きすぎます(2MBまで)');
+      importText = decodeCsv(await file.arrayBuffer());
+      $('importName').textContent = '「' + file.name + '」を取り込みます。今ある問題に追加するか、今ある問題と置き換えるかを選んでください。';
+      editingId = null;
+      renderQuestions();
+      show($('importPanel'), true);
+    });
+  });
+
+  function doImport(mode) {
+    if (importText === null || currentId === null) return;
+    if (mode === 'replace' && !confirm('このセットの今ある問題をすべて消して、CSV の問題に置き換えます。よろしいですか?')) return;
+    run(async function () {
+      var result = await api('POST', '/api/sets/' + encodeURIComponent(currentId) + '/csv', { csv: importText, mode: mode });
+      closeImport();
+      await reload();
+      setNotice(result.added + '問を取り込みました(このセットは全部で' + result.count + '問)');
+    });
+  }
+
+  $('importAppend').addEventListener('click', function () { doImport('append'); });
+  $('importReplace').addEventListener('click', function () { doImport('replace'); });
+  $('importCancel').addEventListener('click', closeImport);
 
   $('addQuestion').addEventListener('click', function () { openForm(null); });
   $('cancel').addEventListener('click', closeForm);

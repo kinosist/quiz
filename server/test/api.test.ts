@@ -169,3 +169,37 @@ it('ゲームの操作も暗証番号が必要。知らない操作は 404', asy
   expect((await gameCall(undefined, 'GET', '/api/game')).response.status).toBe(404);
   expect(game.calls).toEqual([]);
 });
+
+// ---- CSV の書き出し・取り込み ----
+it('セットを CSV で書き出し、別のセットに取り込める', async () => {
+  n = 0;
+  const d = emptyBank();
+  const a = (await (await call(d, 'POST', '/api/sets', { name: 'A' })).response.json()) as BankSet;
+  const b = (await (await call(d, 'POST', '/api/sets', { name: 'B' })).response.json()) as BankSet;
+  await call(d, 'POST', `/api/sets/${a.id}/questions`, good);
+  const exported = await call(d, 'GET', `/api/sets/${a.id}/csv`);
+  expect(exported.response.status).toBe(200);
+  expect(exported.response.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+  expect(exported.changed).toBe(false);
+  const csv = await exported.response.text();
+  expect(csv).toContain('問題,a,b,c,d,2');
+  const imported = await call(d, 'POST', `/api/sets/${b.id}/csv`, { csv, mode: 'append' });
+  expect(imported.response.status).toBe(200);
+  expect(await imported.response.json()).toEqual({ added: 1, count: 1 });
+  expect(imported.changed).toBe(true);
+  expect(d.sets[1].questions[0].text).toBe('問題');
+});
+
+it('CSV の誤り・存在しないセット・認証なし', async () => {
+  n = 0;
+  const d = emptyBank();
+  const a = (await (await call(d, 'POST', '/api/sets', { name: 'A' })).response.json()) as BankSet;
+  const bad = await call(d, 'POST', `/api/sets/${a.id}/csv`, { csv: 'Q,a,a,c,d,1', mode: 'append' });
+  expect(bad.response.status).toBe(400);
+  expect(await bad.response.json()).toEqual({ error: '1行目: 選択肢が重複しています' });
+  expect(bad.changed).toBe(false);
+  expect((await call(d, 'GET', '/api/sets/nope/csv')).response.status).toBe(404);
+  expect((await call(d, 'POST', '/api/sets/nope/csv', { csv: 'Q,a,b,c,d,1', mode: 'append' })).response.status).toBe(404);
+  expect((await call(d, 'GET', `/api/sets/${a.id}/csv`, undefined, null)).response.status).toBe(401);
+  expect((await call(d, 'POST', `/api/sets/${a.id}/csv`, { csv: 'Q,a,b,c,d,1', mode: 'append' }, null)).response.status).toBe(401);
+});

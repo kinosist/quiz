@@ -1,4 +1,5 @@
 import { CONFIG, MSG, charLen } from './config';
+import { CSV_HEADER, formatCsv, parseCsv } from './csv';
 import { SAMPLES, SAMPLE_SET_NAME } from './samples';
 
 export interface BankQuestion {
@@ -137,4 +138,53 @@ export function updateQuestion(data: BankData, questionId: string, body: unknown
 export function deleteQuestion(data: BankData, questionId: string): void {
   const { set, index } = findQuestion(data, questionId);
   set.questions.splice(index, 1);
+}
+
+/** セットの問題を CSV にする。Excel で文字化けしないよう、先頭に BOM を付ける。 */
+export function exportCsv(data: BankData, setId: string): string {
+  const set = getSet(data, setId);
+  return (
+    '\uFEFF' +
+    formatCsv([CSV_HEADER, ...set.questions.map((q) => [q.text, ...q.choices, String(q.correctIndex + 1)])])
+  );
+}
+
+/** 全角の数字を半角にする(Excel で全角入力された「正解」列のため)。 */
+const toHalfWidthDigits = (s: string): string => s.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+
+/**
+ * CSV の問題をセットに取り込む。1行でも誤りがあれば何も取り込まない。
+ * mode: 'append' は今ある問題の後ろに追加、'replace' は今ある問題と置き換える。
+ * 取り込んだ問題数を返す。
+ */
+export function importCsv(data: BankData, setId: string, csv: unknown, mode: unknown, newId: () => string): number {
+  const set = getSet(data, setId);
+  if (mode !== 'append' && mode !== 'replace') throw new BankError(400, MSG.csvBadMode);
+  let records = typeof csv === 'string' ? parseCsv(csv) : [];
+  if (records.length > 0 && records[0].cells[0].trim() === CSV_HEADER[0]) records = records.slice(1); // 見出し行
+  if (records.length === 0) throw new BankError(400, MSG.csvEmpty);
+  if (records.length > CONFIG.importMax) throw new BankError(400, MSG.csvTooMany);
+
+  const questions: Omit<BankQuestion, 'id'>[] = [];
+  const errors: string[] = [];
+  for (const { line, cells } of records) {
+    try {
+      if (cells.length < 6) throw new BankError(400, MSG.csvShortRow);
+      const checked = validQuestion({ text: cells[0], choices: cells.slice(1, 5), correctIndex: 0 });
+      const correct = toHalfWidthDigits(cells[5]).trim();
+      if (!/^[1-4]$/.test(correct)) throw new BankError(400, MSG.csvBadCorrect);
+      questions.push({ ...checked, correctIndex: Number(correct) - 1 });
+    } catch (e) {
+      if (!(e instanceof BankError)) throw e;
+      errors.push(`${line}行目: ${e.message}`);
+    }
+  }
+  if (errors.length > 0) {
+    const shown = errors.slice(0, 5);
+    if (errors.length > shown.length) shown.push(`ほか${errors.length - shown.length}件の誤りがあります`);
+    throw new BankError(400, shown.join('\n'));
+  }
+  const added = questions.map((q) => ({ id: newId(), ...q }));
+  set.questions = mode === 'replace' ? added : [...set.questions, ...added];
+  return added.length;
 }

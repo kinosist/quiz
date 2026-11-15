@@ -25,7 +25,7 @@
 - 【提案】早押しの順番はサーバーに届いた順で決まり、同時押しでも解答権は必ず1人だけになる。
 
 ### 対象外(今回は作らない)
-- 問題の一括取り込み・書き出し(CSV など)、画像や音声つきの問題、セットの複製、1つの問題を複数のセットで共有すること、複数セットを混ぜた出題。
+- 画像や音声つきの問題、セットの複製、1つの問題を複数のセットで共有すること、複数セットを混ぜた出題。
 - Android アプリ内での問題作成(問題作成はサーバーの管理画面だけで行う)。
 - 複数ルーム、合言葉、アカウント登録・ログイン。
 - 成績の長期保存、過去の結果の閲覧。
@@ -207,6 +207,11 @@ Cloudflare Worker ──── /ws ───▶ Durable Object「QuizRoom」(1�
   - `GET /api/sets`(一覧)、`POST /api/sets`(作成)、`PUT /api/sets/:id`(名前変更)、`DELETE /api/sets/:id`(削除)
   - `GET /api/sets/:id/questions`(セット内の問題一覧)、`POST /api/sets/:id/questions`(追加)
   - `PUT /api/questions/:id`(更新)、`DELETE /api/questions/:id`(削除)
+
+### 追加の決定(実装後)
+- 【決定】クイズの開始は管理画面からもできる。管理画面に「クイズの進行」(状態と参加者の表示、開始・中止・もう一度・退出)を置く。API は `GET /api/game`、`POST /api/game/start|abort|again|clear|kick`。
+- 【決定】問題は CSV で取り込み・書き出しできる(セットごと)。列は「問題文, 選択肢1〜4, 正解(1〜4)」。API は `GET /api/sets/:id/csv`、`POST /api/sets/:id/csv`(`{csv, mode: 'append'|'replace'}`)。
+- 【提案】CSV は UTF-8(BOM つきで書き出す)。取り込みは UTF-8 と Shift_JIS の両方を読む。1行でも誤りがあれば何も取り込まない。一度に500問まで。
 
 ## 10. Flutter アプリの作り
 

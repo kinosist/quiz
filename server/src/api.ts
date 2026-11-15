@@ -5,7 +5,9 @@ import {
   createSet,
   deleteQuestion,
   deleteSet,
+  exportCsv,
   getSet,
+  importCsv,
   listSets,
   renameSet,
   updateQuestion,
@@ -122,6 +124,18 @@ export async function handleApi(
           }),
           changed: false,
         };
+      }
+      case 'GET api/sets/:id/csv':
+        return {
+          response: new Response(exportCsv(data, id), { headers: { 'content-type': 'text/csv; charset=utf-8' } }),
+          changed: false,
+        };
+      case 'POST api/sets/:id/csv': {
+        const body = await readBody(req);
+        const get = (key: string): unknown =>
+          typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[key] : undefined;
+        const added = importCsv(data, id, get('csv'), get('mode'), deps.newId);
+        return ok(200, { added, count: getSet(data, id).questions.length });
       }
       case 'POST api/sets/:id/questions':
         return ok(201, addQuestion(data, id, await readBody(req), deps.newId));

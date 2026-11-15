@@ -38,3 +38,9 @@ it('クイズの開始・中止などを操作できる', () => {
     expect(ADMIN_HTML).toContain(t);
   }
 });
+
+it('CSV の取り込み・書き出しができる', () => {
+  for (const t of ['CSVを書き出す', 'CSVを取り込む', '追加する', '置き換える', '/csv', 'shift_jis']) {
+    expect(ADMIN_HTML).toContain(t);
+  }
+});
