@@ -1,0 +1,11 @@
+﻿問題文,選択肢1,選択肢2,選択肢3,選択肢4,正解
+Unityでスクリプトを書くために使われるプログラミング言語は何でしょう?,C++,Java,C#,Python,3
+Unityのシーンに置かれるキャラクターやライト、カメラなど、すべての物体の基本となるクラスは何でしょう?,GameObject,Component,Material,Scene,1
+UnityですべてのGameObjectが必ず持っていて、位置・回転・スケールを管理するコンポーネントは何でしょう?,Rigidbody,Collider,Renderer,Transform,4
+Unityで、GameObjectに取り付けて動かすスクリプトのクラスが継承する基底クラスは何でしょう?,ScriptableObject,MonoBehaviour,EditorWindow,GameObject,2
+Unityのスクリプトで、ゲームの実行中に毎フレーム1回ずつ呼ばれるメソッドは何でしょう?,Start,Update,Awake,OnEnable,2
+Unityのスクリプトで、物理演算に合わせて一定の時間間隔で呼ばれ、Rigidbodyに力を加える処理を書くのに適したメソッドは何でしょう?,Update,LateUpdate,OnGUI,FixedUpdate,4
+UnityでGameObjectに取り付けると、重力や力の影響を受けて物理法則どおりに動くようになるコンポーネントは何でしょう?,Rigidbody,Collider,Animator,Transform,1
+Unityで、設定済みのGameObjectをアセットとして保存し、同じものを何度も生成して使えるようにしたものを何というでしょう?,シーン,マテリアル,プレハブ,パッケージ,3
+Unityで、前のフレームからの経過時間を秒で表し、フレームレートに左右されない動きを作るために使う値は何でしょう?,Time.deltaTime,Time.time,Time.timeScale,Time.frameCount,1
+Unityのスクリプトで、プレハブなどをもとにGameObjectを実行中に生成するメソッドは何でしょう?,Destroy,AddComponent,Instantiate,Find,3

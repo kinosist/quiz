@@ -1,0 +1,11 @@
+﻿問題文,選択肢1,選択肢2,選択肢3,選択肢4,正解
+Flutterのアプリを書くために使う、Googleが開発したプログラミング言語は何でしょう?,Dart,Kotlin,Swift,Go,1
+Flutterで、自分自身では状態を持たず、与えられた値だけで表示が決まるウィジェットの基底クラスは何でしょう?,StatefulWidget,InheritedWidget,StatelessWidget,RenderObjectWidget,3
+StatefulWidgetで、状態が変わったことをフレームワークに知らせて画面を再描画させるメソッドは何でしょう?,initState,setState,build,dispose,2
+Flutterで、ソースコードの変更を、アプリの状態を保ったまま実行中のアプリにすぐ反映する機能を何というでしょう?,ホットリスタート,フルビルド,コールドスタート,ホットリロード,4
+Flutterのプロジェクトで、利用するパッケージや画像などのアセットを記述する設定ファイルは何でしょう?,build.gradle,package.json,pubspec.yaml,AndroidManifest.xml,3
+Flutterで、複数の子ウィジェットを縦方向に並べるときに使うウィジェットは何でしょう?,Column,Row,Stack,Wrap,1
+Dartで、あとから1回だけ結果が返ってくる非同期処理を表し、awaitで結果を待つことができるクラスは何でしょう?,Stream,Isolate,Timer,Future,4
+StatefulWidgetのStateオブジェクトが作られたときに1回だけ呼ばれ、初期化の処理を書くメソッドは何でしょう?,dispose,initState,didUpdateWidget,setState,2
+RowやColumnの中で、子ウィジェットを残りの空きスペースいっぱいに広げるために使うウィジェットは何でしょう?,SizedBox,Padding,Align,Expanded,4
+Flutterで画面を積み重ねて管理し、pushで次の画面へ進み、popで前の画面に戻る仕組みを提供するウィジェットは何でしょう?,Scaffold,Navigator,AppBar,Drawer,2
