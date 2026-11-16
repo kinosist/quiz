@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createSet, emptyBank, getSet, importCsv } from '../src/bank';
 
+// このテストだけ Node.js のファイル操作を使うので、型チェック(tsconfig の exclude)の対象外にしている。
 // リポジトリの questions/ にある CSV が、管理画面でそのまま取り込めることを確かめる
 const dir = join(__dirname, '..', '..', 'questions');
 const files = readdirSync(dir).filter((f: string) => f.endsWith('.csv'));
