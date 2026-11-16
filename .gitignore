@@ -43,3 +43,27 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ---- このプロジェクト用の追加 ----
+
+# 秘密の値(暗証番号・API キー・署名鍵)。公開リポジトリに入れない
+.env
+.env.*
+!.env.example
+.dev.vars
+!.dev.vars.example
+*.jks
+*.keystore
+key.properties
+**/android/key.properties
+google-services.json
+GoogleService-Info.plist
+
+# サーバー(Cloudflare Workers)
+node_modules/
+.wrangler/
+
+# 開発ツールの作業用ファイル
+.superpowers/
+.claude/
+*.local.json
