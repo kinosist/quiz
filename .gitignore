@@ -67,3 +67,6 @@ node_modules/
 .superpowers/
 .claude/
 *.local.json
+
+# 問題ファイル(手元だけに置き、公開しない)
+questions/*.csv

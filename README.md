@@ -76,7 +76,6 @@ PC のブラウザで `http://localhost:8787/admin` を開き、先生用と同�
 日本で一番高い山は?,富士山,北岳,槍ヶ岳,立山,1
 ```
 
-- `questions/` フォルダーに、取り込み用の問題集があります(`it_quiz.csv`: IT の基礎10問、`it_quiz_hard.csv`: IT の少し難しめの10問。IT パスポート〜基本情報技術者の入口レベル、`flutter_quiz.csv`: Flutter の10問、`unity_quiz.csv`: Unity の10問)。管理画面で新しいセットを作り、「CSVを取り込む」で読み込めます。
 - 「CSVを書き出す」で出したファイルは Excel でそのまま開けます。編集して「CSVを取り込む」で戻せます。
 - 取り込むときは、今ある問題に「追加する」か、今ある問題と「置き換える」かを選びます。
 - Excel で保存した CSV(Shift_JIS)も、UTF-8 の CSV も読めます。

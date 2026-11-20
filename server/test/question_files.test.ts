@@ -1,14 +1,13 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createSet, emptyBank, getSet, importCsv } from '../src/bank';
 
 // このテストだけ Node.js のファイル操作を使うので、型チェック(tsconfig の exclude)の対象外にしている。
-// リポジトリの questions/ にある CSV が、管理画面でそのまま取り込めることを確かめる
+// 手元の questions/ にある CSV が、管理画面でそのまま取り込めることを確かめる。
+// 問題ファイルは Git に入れていない(.gitignore)ので、ファイルがなければ何も調べない
 const dir = join(__dirname, '..', '..', 'questions');
-const files = readdirSync(dir).filter((f: string) => f.endsWith('.csv'));
-
-it('questions/ に CSV がある', () => expect(files.length).toBeGreaterThan(0));
+const files = existsSync(dir) ? readdirSync(dir).filter((f: string) => f.endsWith('.csv')) : [];
 
 it('questions/ の CSV はどれも誤りなく取り込める', () => {
   for (const file of files) {
@@ -23,7 +22,7 @@ it('questions/ の CSV はどれも誤りなく取り込める', () => {
   }
 });
 
-it('IT クイズは10問で、正解の位置が偏っていない', () => {
+it.skipIf(!files.includes('it_quiz.csv'))('IT クイズは10問で、正解の位置が偏っていない', () => {
   const data = emptyBank();
   let n = 0;
   const set = createSet(data, { name: 'it' }, 1, () => 'id' + ++n);
